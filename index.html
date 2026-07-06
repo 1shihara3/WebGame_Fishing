@@ -167,14 +167,12 @@
     const overlayTitle = document.getElementById('overlay-title');
     const overlayDesc = document.getElementById('overlay-desc');
     
-    // ボタン類
     const startBtn = document.getElementById('start-btn');
     const pauseBtn = document.getElementById('pause-btn');
     const resumeBtn = document.getElementById('resume-btn');
     const restartBtn = document.getElementById('restart-btn');
     const titleBtn = document.getElementById('title-btn');
 
-    // ゲーム状態
     let score = 0;
     let timeLeft = 60;
     let gameTimer = null;
@@ -184,7 +182,6 @@
     let hook = null;
     let popups = [];
 
-    // 魚（およびゴミ）の定義
     const FISH_TYPES = [
         { name: 'アユ', emoji: '🐟', points: 100, speed: 2, prob: 0.4, size: 35 },
         { name: 'ヤマメ', emoji: '🐠', points: 200, speed: 3.5, prob: 0.3, size: 40 },
@@ -206,7 +203,7 @@
             }
             if (!this.type) this.type = FISH_TYPES[0];
 
-            this.direction = Math.random() < 0.5 ? 1 : -1;
+            this.direction = Math.random() < 0.5 ? 1 : -1; // 1: 右向き, -1: 左向き
             this.x = this.direction === 1 ? -60 : canvas.width + 60;
             this.y = Math.random() * (canvas.height - 150) + 100;
             this.speed = (this.type.speed + Math.random() * 1.5) * this.direction;
@@ -236,26 +233,34 @@
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
-            ctx.translate(this.x, this.y);
-            if (this.direction === -1) {
+            let shakeX = 0;
+            let shakeY = 0;
+            if (this.state === 'biting') {
+                shakeX = (Math.random() - 0.5) * 8;
+                shakeY = (Math.random() - 0.5) * 8;
+            }
+
+            ctx.translate(this.x + shakeX, this.y + shakeY);
+            
+            // ★修正：進行方向に顔を向ける
+            // 魚の絵文字はデフォルトで「左(←)」を向いているため、
+            // 右(→)に進むとき（direction === 1）に反転させる
+            if (this.direction === 1) {
                 ctx.scale(-1, 1);
             }
+            
             ctx.fillText(this.type.emoji, 0, 0);
             ctx.restore();
 
-            // ★修正：食いつき中の表示（HITの下にpt表記を追加）
             if (this.state === 'biting') {
-                // 「HIT!」の描画
                 ctx.fillStyle = '#ff1744';
-                ctx.font = 'bold 20px Arial';
+                ctx.font = 'bold 22px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText('HIT!', this.x, this.y - 45);
+                ctx.fillText('HIT!', this.x + shakeX, this.y + shakeY - 40);
 
-                // 「+〇pt / -〇pt」の描画
-                const pts = this.type.points;
-                ctx.fillStyle = pts > 0 ? '#00e676' : '#ff5252';
-                ctx.font = 'bold 16px Arial';
-                ctx.fillText(`${pts > 0 ? '+' : ''}${pts}pt`, this.x, this.y - 23);
+                ctx.fillStyle = '#ffeb3b';
+                ctx.font = 'bold 14px Arial';
+                ctx.fillText('もう一度クリック!', this.x + shakeX, this.y + shakeY - 20);
             }
         }
     }
@@ -323,24 +328,21 @@
         pauseOverlay.style.display = 'none';
     }
 
-    // ★追加：一時停止（ポーズ）関数
     function pauseGame() {
         if (!isPlaying || isPaused) return;
         isPaused = true;
-        clearInterval(gameTimer); // タイマーを一時停止
+        clearInterval(gameTimer);
         pauseOverlay.style.display = 'flex';
     }
 
-    // ★追加：再開（レジューム）関数
     function resumeGame() {
         if (!isPlaying || !isPaused) return;
         isPaused = false;
         pauseOverlay.style.display = 'none';
-        startTimer(); // タイマーを再始動
-        requestAnimationFrame(gameLoop); // ループを再開
+        startTimer();
+        requestAnimationFrame(gameLoop);
     }
 
-    // ★追加：タイトル（スタート画面）に戻る関数
     function backToTitle() {
         isPlaying = false;
         isPaused = false;
@@ -362,11 +364,10 @@
     }
 
     function gameLoop() {
-        if (!isPlaying || isPaused) return; // ★修正：ポーズ中は処理をストップ
+        if (!isPlaying || isPaused) return;
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // 背景の川の流れ
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
         ctx.lineWidth = 2;
         for (let i = 0; i < 5; i++) {
@@ -378,7 +379,6 @@
 
         spawnFish();
 
-        // 魚の更新と描画
         for (let i = fishes.length - 1; i >= 0; i--) {
             fishes[i].update();
             fishes[i].draw();
@@ -387,22 +387,27 @@
             }
         }
 
-        // 釣り針の描画
         if (hook) {
             ctx.beginPath();
             ctx.moveTo(hook.x, 0);
-            ctx.lineTo(hook.x, hook.y);
+            
+            let hookTargetY = hook.y;
+            if (hook.target && hook.target.state === 'biting') {
+                hookTargetY += (Math.random() - 0.5) * 8;
+            }
+            
+            ctx.lineTo(hook.x, hookTargetY);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
             ctx.lineWidth = 1.5;
             ctx.stroke();
 
             ctx.fillStyle = '#ff1744';
             ctx.beginPath();
-            ctx.arc(hook.x, hook.y, 8, 0, Math.PI * 2);
+            ctx.arc(hook.x, hookTargetY, 8, 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#ffffff';
             ctx.beginPath();
-            ctx.arc(hook.x, hook.y - 4, 8, 0, Math.PI, true);
+            ctx.arc(hook.x, hookTargetY - 4, 8, 0, Math.PI, true);
             ctx.fill();
 
             hook.timer--;
@@ -414,7 +419,6 @@
             }
         }
 
-        // ポップアップの更新と描画
         for (let i = popups.length - 1; i >= 0; i--) {
             popups[i].update();
             popups[i].draw();
@@ -426,9 +430,8 @@
         requestAnimationFrame(gameLoop);
     }
 
-    // クリック・タップイベント処理
     canvas.addEventListener('pointerdown', (e) => {
-        if (!isPlaying || isPaused) return; // ★修正：ポーズ中はクリック無効
+        if (!isPlaying || isPaused) return;
 
         const rect = canvas.getBoundingClientRect();
         const clickX = (e.clientX - rect.left) * (canvas.width / rect.width);
@@ -479,12 +482,11 @@
         }
     });
 
-    // イベントリスナーの登録
     startBtn.addEventListener('click', startGame);
-    pauseBtn.addEventListener('click', pauseGame);       // 一時停止ボタン
-    resumeBtn.addEventListener('click', resumeGame);     // 再開ボタン
-    restartBtn.addEventListener('click', startGame);     // 最初からやり直すボタン（startGameを再呼出）
-    titleBtn.addEventListener('click', backToTitle);     // タイトルに戻るボタン
+    pauseBtn.addEventListener('click', pauseGame);
+    resumeBtn.addEventListener('click', resumeGame);
+    restartBtn.addEventListener('click', startGame);
+    titleBtn.addEventListener('click', backToTitle);
 </script>
 
 </body>
