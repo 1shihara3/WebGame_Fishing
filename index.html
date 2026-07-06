@@ -124,9 +124,14 @@
             background-color: #f5f5f5;
             color: #424242;
         }
+        /* 修正箇所: タイトルへ戻るボタンを白背景・赤文字に */
         .btn-danger {
-            background-color: #ff8a80;
+            background-color: #ffffff;
             color: #b71c1c;
+            border: 2px solid #b71c1c;
+        }
+        .btn-danger:hover {
+            background-color: #ffebee;
         }
         #ranking-container {
             background: rgba(255, 255, 255, 0.1);
@@ -229,7 +234,6 @@
     let hook = null;
     let popups = [];
 
-    // --- 変更箇所: 魚のリスト ---
     const FISH_TYPES = [
         { name: 'アユ', emoji: '🐟', points: 100, speed: 2, prob: 0.45, size: 35 },
         { name: 'コイ', emoji: '🎏', points: 200, speed: 3, prob: 0.30, size: 40 },
