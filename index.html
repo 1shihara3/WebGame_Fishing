@@ -70,7 +70,7 @@
             height: 100%;
             display: block;
         }
-        #overlay, #pause-overlay {
+        #overlay, #pause-overlay, #result-overlay {
             position: absolute;
             top: 0;
             left: 0;
@@ -87,6 +87,10 @@
         #pause-overlay {
             background: rgba(0, 0, 0, 0.75);
             z-index: 15;
+        }
+        #result-overlay {
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 20;
         }
         h1 {
             font-size: 36px;
@@ -124,6 +128,29 @@
             background-color: #ff8a80;
             color: #b71c1c;
         }
+        #ranking-container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px 30px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            text-align: left;
+        }
+        #ranking-container h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            text-align: center;
+            color: #4fc3f7;
+        }
+        #ranking-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-size: 18px;
+        }
+        #ranking-list li {
+            margin-bottom: 5px;
+            letter-spacing: 1px;
+        }
     </style>
 </head>
 <body>
@@ -154,6 +181,22 @@
                 <button class="btn btn-danger" id="title-btn">タイトルに戻る</button>
             </div>
         </div>
+
+        <div id="result-overlay" style="display: none;">
+            <h1>タイムアップ！</h1>
+            <p>今回のスコア: <strong id="final-score-text" style="font-size: 28px; color: #ffd54f;">0</strong> pt</p>
+            
+            <div id="ranking-container">
+                <h3>🏆 ハイスコアランキング 🏆</h3>
+                <ul id="ranking-list">
+                </ul>
+            </div>
+
+            <div style="display: flex; gap: 15px;">
+                <button class="btn" id="result-restart-btn">もう一度プレイ</button>
+                <button class="btn btn-secondary" id="result-title-btn">タイトルに戻る</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -162,16 +205,20 @@
     const ctx = canvas.getContext('2d');
     const scoreDisplay = document.getElementById('score-display');
     const timeDisplay = document.getElementById('time-display');
+    
     const overlay = document.getElementById('overlay');
     const pauseOverlay = document.getElementById('pause-overlay');
-    const overlayTitle = document.getElementById('overlay-title');
-    const overlayDesc = document.getElementById('overlay-desc');
+    const resultOverlay = document.getElementById('result-overlay');
+    const finalScoreText = document.getElementById('final-score-text');
+    const rankingList = document.getElementById('ranking-list');
     
     const startBtn = document.getElementById('start-btn');
     const pauseBtn = document.getElementById('pause-btn');
     const resumeBtn = document.getElementById('resume-btn');
     const restartBtn = document.getElementById('restart-btn');
     const titleBtn = document.getElementById('title-btn');
+    const resultRestartBtn = document.getElementById('result-restart-btn');
+    const resultTitleBtn = document.getElementById('result-title-btn');
 
     let score = 0;
     let timeLeft = 60;
@@ -182,12 +229,13 @@
     let hook = null;
     let popups = [];
 
+    // --- 変更箇所: 魚のリスト ---
     const FISH_TYPES = [
-        { name: 'アユ', emoji: '🐟', points: 100, speed: 2, prob: 0.4, size: 35 },
-        { name: 'ヤマメ', emoji: '🐠', points: 200, speed: 3.5, prob: 0.3, size: 40 },
-        { name: 'ニジマス', emoji: '🐡', points: 300, speed: 4.5, prob: 0.15, size: 45 },
-        { name: '川の主', emoji: '👑', points: 1000, speed: 6, prob: 0.05, size: 55 },
-        { name: '長靴', emoji: '🥾', points: -50, speed: 1.5, prob: 0.1, size: 35 }
+        { name: 'アユ', emoji: '🐟', points: 100, speed: 2, prob: 0.45, size: 35 },
+        { name: 'コイ', emoji: '🎏', points: 200, speed: 3, prob: 0.30, size: 40 },
+        { name: 'オオウナギ', emoji: '🐍', points: 500, speed: 4, prob: 0.15, size: 45 },
+        { name: 'リュウグウノツカイ', emoji: '🐉', points: 1500, speed: 6, prob: 0.02, size: 55 },
+        { name: '桜島の火山灰袋', emoji: '🌋', points: -100, speed: 1.5, prob: 0.08, size: 35 }
     ];
 
     class Fish {
@@ -203,7 +251,7 @@
             }
             if (!this.type) this.type = FISH_TYPES[0];
 
-            this.direction = Math.random() < 0.5 ? 1 : -1; // 1: 右向き, -1: 左向き
+            this.direction = Math.random() < 0.5 ? 1 : -1;
             this.x = this.direction === 1 ? -60 : canvas.width + 60;
             this.y = Math.random() * (canvas.height - 150) + 100;
             this.speed = (this.type.speed + Math.random() * 1.5) * this.direction;
@@ -242,9 +290,6 @@
 
             ctx.translate(this.x + shakeX, this.y + shakeY);
             
-            // ★修正：進行方向に顔を向ける
-            // 魚の絵文字はデフォルトで「左(←)」を向いているため、
-            // 右(→)に進むとき（direction === 1）に反転させる
             if (this.direction === 1) {
                 ctx.scale(-1, 1);
             }
@@ -287,6 +332,37 @@
         }
     }
 
+    function saveAndGetScores(newScore) {
+        let scores = JSON.parse(localStorage.getItem('fishingGameRanking')) || [];
+        scores.push(newScore);
+        scores.sort((a, b) => b - a);
+        scores = scores.slice(0, 5);
+        localStorage.setItem('fishingGameRanking', JSON.stringify(scores));
+        return scores;
+    }
+
+    function renderRanking(currentScore) {
+        const topScores = saveAndGetScores(currentScore);
+        rankingList.innerHTML = '';
+        let isCurrentScoreHighlighted = false;
+
+        topScores.forEach((s, index) => {
+            const li = document.createElement('li');
+            let rankIcon = `${index + 1}位`;
+            if (index === 0) rankIcon = '🥇 1位';
+            if (index === 1) rankIcon = '🥈 2位';
+            if (index === 2) rankIcon = '🥉 3位';
+
+            if (s === currentScore && !isCurrentScoreHighlighted) {
+                li.innerHTML = `<strong>${rankIcon} : <span style="color:#ffd54f;">${s} pt (NEW!)</span></strong>`;
+                isCurrentScoreHighlighted = true;
+            } else {
+                li.textContent = `${rankIcon} : ${s} pt`;
+            }
+            rankingList.appendChild(li);
+        });
+    }
+
     function startGame() {
         score = 0;
         timeLeft = 60;
@@ -298,8 +374,10 @@
         
         scoreDisplay.textContent = score;
         timeDisplay.textContent = timeLeft;
+        
         overlay.style.display = 'none';
         pauseOverlay.style.display = 'none';
+        resultOverlay.style.display = 'none';
 
         startTimer();
         requestAnimationFrame(gameLoop);
@@ -321,11 +399,9 @@
         isPlaying = false;
         isPaused = false;
         clearInterval(gameTimer);
-        overlayTitle.textContent = 'タイムアップ！';
-        overlayDesc.innerHTML = `あなたの最終スコアは <strong style="font-size:24px; color:#ffd54f;">${score} pt</strong> です！`;
-        startBtn.textContent = 'もう一度遊ぶ';
-        overlay.style.display = 'flex';
-        pauseOverlay.style.display = 'none';
+        finalScoreText.textContent = score;
+        renderRanking(score);
+        resultOverlay.style.display = 'flex';
     }
 
     function pauseGame() {
@@ -348,12 +424,8 @@
         isPaused = false;
         clearInterval(gameTimer);
         pauseOverlay.style.display = 'none';
-        
-        overlayTitle.textContent = '川釣りタイムアタック';
-        overlayDesc.innerHTML = '流れる魚を狙ってクリック！<br>「HIT!」が出た瞬間に再度クリックで釣り上げろ！';
-        startBtn.textContent = 'ゲームスタート';
+        resultOverlay.style.display = 'none';
         overlay.style.display = 'flex';
-        
         ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
@@ -365,9 +437,7 @@
 
     function gameLoop() {
         if (!isPlaying || isPaused) return;
-
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
         ctx.lineWidth = 2;
         for (let i = 0; i < 5; i++) {
@@ -376,31 +446,23 @@
             ctx.lineTo(canvas.width, (Date.now() / 10 + i * 80) % canvas.height);
             ctx.stroke();
         }
-
         spawnFish();
-
         for (let i = fishes.length - 1; i >= 0; i--) {
             fishes[i].update();
             fishes[i].draw();
-            if (fishes[i].toRemove) {
-                fishes.splice(i, 1);
-            }
+            if (fishes[i].toRemove) fishes.splice(i, 1);
         }
-
         if (hook) {
             ctx.beginPath();
             ctx.moveTo(hook.x, 0);
-            
             let hookTargetY = hook.y;
             if (hook.target && hook.target.state === 'biting') {
                 hookTargetY += (Math.random() - 0.5) * 8;
             }
-            
             ctx.lineTo(hook.x, hookTargetY);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
             ctx.lineWidth = 1.5;
             ctx.stroke();
-
             ctx.fillStyle = '#ff1744';
             ctx.beginPath();
             ctx.arc(hook.x, hookTargetY, 8, 0, Math.PI * 2);
@@ -409,51 +471,38 @@
             ctx.beginPath();
             ctx.arc(hook.x, hookTargetY - 4, 8, 0, Math.PI, true);
             ctx.fill();
-
             hook.timer--;
             if (hook.timer <= 0) {
-                if (hook.target && hook.target.state === 'biting') {
-                    hook.target.state = 'swimming';
-                }
+                if (hook.target && hook.target.state === 'biting') hook.target.state = 'swimming';
                 hook = null;
             }
         }
-
         for (let i = popups.length - 1; i >= 0; i--) {
             popups[i].update();
             popups[i].draw();
-            if (popups[i].life <= 0) {
-                popups.splice(i, 1);
-            }
+            if (popups[i].life <= 0) popups.splice(i, 1);
         }
-
         requestAnimationFrame(gameLoop);
     }
 
     canvas.addEventListener('pointerdown', (e) => {
         if (!isPlaying || isPaused) return;
-
         const rect = canvas.getBoundingClientRect();
         const clickX = (e.clientX - rect.left) * (canvas.width / rect.width);
         const clickY = (e.clientY - rect.top) * (canvas.height / rect.height);
-
         if (hook && hook.target && hook.target.state === 'biting') {
             const caughtFish = hook.target;
             score += caughtFish.type.points;
             scoreDisplay.textContent = score;
-
             const color = caughtFish.type.points > 0 ? '#00e676' : '#ff1744';
             const prefix = caughtFish.type.points > 0 ? '+' : '';
             popups.push(new Popup(`${caughtFish.type.name} ${prefix}${caughtFish.type.points}pt!`, caughtFish.x, caughtFish.y, color));
-
             fishes = fishes.filter(f => f !== caughtFish);
             hook = null;
             return;
         }
-
         let closestFish = null;
         let minDistance = 50;
-
         for (let fish of fishes) {
             if (fish.state !== 'swimming') continue;
             const dist = Math.hypot(fish.x - clickX, fish.y - clickY);
@@ -462,23 +511,12 @@
                 closestFish = fish;
             }
         }
-
         if (closestFish) {
             closestFish.state = 'biting';
             closestFish.biteTimer = 60;
-            hook = {
-                x: closestFish.x,
-                y: closestFish.y,
-                timer: 60,
-                target: closestFish
-            };
+            hook = { x: closestFish.x, y: closestFish.y, timer: 60, target: closestFish };
         } else {
-            hook = {
-                x: clickX,
-                y: clickY,
-                timer: 30,
-                target: null
-            };
+            hook = { x: clickX, y: clickY, timer: 30, target: null };
         }
     });
 
@@ -487,7 +525,8 @@
     resumeBtn.addEventListener('click', resumeGame);
     restartBtn.addEventListener('click', startGame);
     titleBtn.addEventListener('click', backToTitle);
+    resultRestartBtn.addEventListener('click', startGame);
+    resultTitleBtn.addEventListener('click', backToTitle);
 </script>
-
 </body>
 </html>
